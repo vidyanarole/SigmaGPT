@@ -39,10 +39,10 @@ router.get("/thread/:threadId", async(req, res) => {
         const thread = await Thread.findOne({threadId});
 
         if(!thread) {
-            res.status(404).json({error: "Thread not found"});
+            return res.status(404).json({error: "Thread not found"});
         }
 
-        res.json(thread.messages);
+        return res.json(thread.messages);
     } catch(err) {
         console.log(err);
         res.status(500).json({error: "Failed to fetch chat"});
@@ -56,10 +56,10 @@ router.delete("/thread/:threadId", async (req, res) => {
         const deletedThread = await Thread.findOneAndDelete({threadId});
 
         if(!deletedThread) {
-            res.status(404).json({error: "Thread not found"});
+            return res.status(404).json({error: "Thread not found"});
         }
 
-        res.status(200).json({success : "Thread deleted successfully"});
+        return res.status(200).json({success : "Thread deleted successfully"});
 
     } catch(err) {
         console.log(err);
@@ -70,45 +70,52 @@ router.delete("/thread/:threadId", async (req, res) => {
 router.post("/chat", async(req, res) => {
     const {threadId, message} = req.body;
   
-    if (!threadId || !message) {
-    return res.status(400).json({ error: "missing required fields" });
-}
+    if (!threadId || typeof threadId !== "string" || !message || typeof message !== "string" || !message.trim()) {
+        return res.status(400).json({ error: "threadId and non-empty message are required" });
+    }
 
+    const trimmedMessage = message.trim();
 
     try {
         let thread = await Thread.findOne({threadId});
 
-        if(!thread) {
-            //create a new thread in Db
+        if (!thread) {
+            // Create a new thread in DB with the user's initial message
             thread = new Thread({
                 threadId,
-                title: message,
-                messages: [{role: "user", content: message}]
+                title: trimmedMessage.length > 50 ? `${trimmedMessage.substring(0, 47)}...` : trimmedMessage,
+                messages: [{role: "user", content: trimmedMessage}]
             });
         } else {
-            thread.messages.push({role: "user", content: message});
+            thread.messages.push({role: "user", content: trimmedMessage});
+            thread.updatedAt = new Date();
         }
 
-       const assistantReply = await getOpenAIAPIResponse(message);
-
-if (!assistantReply) {
-    return res.status(500).json({
-        error: "AI failed to generate response"
-    });
-}
-
-thread.messages.push({
-    role: "assistant",
-    content: assistantReply
-});
-
-        thread.updatedAt = new Date();
-
+        // Persist the user message first so it is not lost if the AI call fails
         await thread.save();
-        res.json({reply: assistantReply});
+
+        // Pass full thread messages for multi-turn conversation context
+        const aiResult = await getOpenAIAPIResponse(thread.messages);
+
+        if (!aiResult || !aiResult.success) {
+            return res.status(aiResult?.status || 502).json({
+                error: aiResult?.error || "AI failed to generate response. Please check your API key or network connection."
+            });
+        }
+
+        const assistantReply = aiResult.content;
+
+        thread.messages.push({
+            role: "assistant",
+            content: assistantReply
+        });
+        thread.updatedAt = new Date();
+        await thread.save();
+
+        return res.json({reply: assistantReply});
     } catch(err) {
-        console.log(err);
-        res.status(500).json({error: "something went wrong"});
+        console.error("Chat route error:", err.message || err);
+        return res.status(500).json({error: "Something went wrong processing your request"});
     }
 });
 

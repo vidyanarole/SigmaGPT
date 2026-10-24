@@ -12,6 +12,11 @@ function App() {
   const [prevChats, setPrevChats] = useState([]); //stores all chats of curr threads
   const [newChat, setNewChat] = useState(true);
   const [allThreads, setAllThreads] = useState([]);
+  const [threadsTrigger, setThreadsTrigger] = useState(0);
+
+  const triggerSidebarRefresh = () => {
+    setThreadsTrigger(prev => prev + 1);
+  };
 
   const providerValues = {
     prompt, setPrompt,
@@ -19,7 +24,9 @@ function App() {
     currThreadId, setCurrThreadId,
     newChat, setNewChat,
     prevChats, setPrevChats,
-    allThreads, setAllThreads
+    allThreads, setAllThreads,
+    threadsTrigger,
+    triggerSidebarRefresh
   }; 
 
   return (

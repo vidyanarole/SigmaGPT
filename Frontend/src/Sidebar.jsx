@@ -1,27 +1,29 @@
 import "./Sidebar.css";
-import { useContext, useEffect } from "react";
+import { useContext, useEffect, useCallback } from "react";
 import { MyContext } from "./MyContext.jsx";
 import {v1 as uuidv1} from "uuid";
+import blackLogo from "./assets/blacklogo.png";
+import { API_BASE_URL } from "./api.js";
 
 function Sidebar() {
-    const {allThreads, setAllThreads, currThreadId, setNewChat, setPrompt, setReply, setCurrThreadId, setPrevChats} = useContext(MyContext);
+    const {allThreads, setAllThreads, currThreadId, setNewChat, setPrompt, setReply, setCurrThreadId, setPrevChats, threadsTrigger} = useContext(MyContext);
 
-    const getAllThreads = async () => {
+    const getAllThreads = useCallback(async () => {
         try {
-            const response = await fetch("http://localhost:8080/api/thread");
+            const response = await fetch(`${API_BASE_URL}/api/thread`);
             const res = await response.json();
-            const filteredData = res.map(thread => ({threadId: thread.threadId, title: thread.title}));
-            //console.log(filteredData);
-            setAllThreads(filteredData);
+            if (Array.isArray(res)) {
+                const filteredData = res.map(thread => ({threadId: thread.threadId, title: thread.title}));
+                setAllThreads(filteredData);
+            }
         } catch(err) {
-            console.log(err);
+            console.error("Failed to fetch threads:", err);
         }
-    };
+    }, [setAllThreads]);
 
     useEffect(() => {
         getAllThreads();
-    }, [currThreadId])
-
+    }, [currThreadId, threadsTrigger, getAllThreads]);
 
     const createNewChat = () => {
         setNewChat(true);
@@ -35,22 +37,24 @@ function Sidebar() {
         setCurrThreadId(newThreadId);
 
         try {
-            const response = await fetch(`http://localhost:8080/api/thread/${newThreadId}`);
+            const response = await fetch(`${API_BASE_URL}/api/thread/${newThreadId}`);
             const res = await response.json();
-            console.log(res);
-            setPrevChats(res);
+            if (Array.isArray(res)) {
+                setPrevChats(res);
+            } else {
+                setPrevChats([]);
+            }
             setNewChat(false);
             setReply(null);
         } catch(err) {
-            console.log(err);
+            console.error("Failed to fetch thread chats:", err);
         }
     }   
 
     const deleteThread = async (threadId) => {
         try {
-            const response = await fetch(`http://localhost:8080/api/thread/${threadId}`, {method: "DELETE"});
-            const res = await response.json();
-            console.log(res);
+            const response = await fetch(`${API_BASE_URL}/api/thread/${threadId}`, {method: "DELETE"});
+            await response.json();
 
             //updated threads re-render
             setAllThreads(prev => prev.filter(thread => thread.threadId !== threadId));
@@ -60,14 +64,14 @@ function Sidebar() {
             }
 
         } catch(err) {
-            console.log(err);
+            console.error("Failed to delete thread:", err);
         }
     }
 
     return (
         <section className="sidebar">
             <button onClick={createNewChat}>
-                <img src="src/assets/blacklogo.png" alt="gpt logo" className="logo"></img>
+                <img src={blackLogo} alt="gpt logo" className="logo" />
                 <span><i className="fa-solid fa-pen-to-square"></i></span>
             </button>
 
@@ -76,7 +80,7 @@ function Sidebar() {
                 {
                     allThreads?.map((thread, idx) => (
                         <li key={idx} 
-                            onClick={(e) => changeThread(thread.threadId)}
+                            onClick={() => changeThread(thread.threadId)}
                             className={thread.threadId === currThreadId ? "highlighted": " "}
                         >
                             {thread.title}
